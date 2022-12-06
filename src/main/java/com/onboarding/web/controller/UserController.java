@@ -64,7 +64,7 @@ public class UserController extends BaseController{
 	@PostMapping(UrlMapping.SOCIAL_SIGNUP)
 	public ResponseEntity<ResponseModel> socialSignUp(@RequestBody SocialLoginModel socialLoginModel) throws CustomException, GeneralSecurityException, IOException {
 		ResponseModel response = ResponseModel.getInstance();
-		response.setData(userService.googleSignUp(socialLoginModel));
+		response.setData(userService.socialSignUp(socialLoginModel));
 		response.setMessage(env.getProperty(SuccessMessage.SUCCESS));
 		response.setStatusCode(HttpStatus.SC_OK);
 		return new ResponseEntity<>(response, org.springframework.http.HttpStatus.OK);

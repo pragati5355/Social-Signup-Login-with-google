@@ -19,4 +19,7 @@ public interface UserService {
 	
 	public Map<String, Object> googleSignUp(SocialLoginModel socialLoginModel) throws GeneralSecurityException, IOException;
 
+	public Map<String, Object> facebookSignup(SocialLoginModel socialLoginModel);
+	
+	public Object socialSignUp(SocialLoginModel socialLoginModel)throws GeneralSecurityException, IOException;
 }

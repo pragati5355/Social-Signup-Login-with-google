@@ -23,6 +23,13 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken.Payload;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson.JacksonFactory;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mashape.unirest.http.HttpResponse;
+import com.mashape.unirest.http.Unirest;
+import com.mashape.unirest.http.exceptions.UnirestException;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.onboarding.business.constant.ExceptionMessage;
 import com.onboarding.business.constant.GenericConstants;
@@ -34,6 +41,7 @@ import com.onboarding.persistence.entity.User;
 import com.onboarding.persistence.repository.UserRepository;
 import com.onboarding.web.jwt.AuthToken;
 import com.onboarding.web.jwt.JwtTokenUtil;
+import com.onboarding.web.model.FacebookSignupModel;
 import com.onboarding.web.model.LoginModel;
 import com.onboarding.web.model.ResponseModel;
 import com.onboarding.web.model.SocialLoginModel;
@@ -144,9 +152,6 @@ public class UserServiceImpl implements UserService{
 		return data;
 	}
 	
-	
-	
-	
 	private Map<String, Object> loginGoogleUser(User user, Map<String, Object> data) {
 		
 		String token = jwtTokenUtil.authenticationUser(user);
@@ -222,4 +227,108 @@ public class UserServiceImpl implements UserService{
 		}
 	}
 
+	private FacebookSignupModel callFacebookAPI(String faceBookUrl) {
+		
+		HttpResponse<String> response;
+		
+		try {
+			response = Unirest.get(faceBookUrl).asString();
+			
+			JsonElement element = new JsonParser().parse(response.getBody());
+			
+			JsonObject jsonObject = element.getAsJsonObject();
+			
+			Gson gson = new Gson();
+			
+			return gson.fromJson(jsonObject, FacebookSignupModel.class);
+		} catch (UnirestException e) {
+			throw new CustomException(environment.getProperty(ExceptionMessage.ACCESS_TOKEN_NOT_VALID), HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+	
+	private Map<String, Object> savefacebookUser(FacebookSignupModel facebookSignupModel, Map<String, Object> data,
+			SocialLoginModel socialLoginModel) {
+		
+		User user = new User();
+		
+		if(socialLoginModel.getFaceBookEmail() != null) {
+			user.setEmail(socialLoginModel.getFaceBookEmail());
+		} else {
+			user.setEmail(facebookSignupModel.getEmail());
+		}
+		
+		user.setFirstName(facebookSignupModel.getFirstName());
+		user.setLastName(facebookSignupModel.getLastName());
+		user.setProfileImage(facebookSignupModel.getPicture().getData().getUrl());
+		user.setProvider(GenericConstants.FACEBOOK_AUTH);
+		user.setProviderId(GenericConstants.FACEBOOK_AUTH + facebookSignupModel.getId());
+		
+		userRepository.save(user);
+		
+		String token = jwtTokenUtil.authenticationUser(user);
+		
+		UserResponseModel responseModel = CustomDozerHelper.mapEntity(user, UserResponseModel.class);
+		
+		data.put(GenericConstants.SIGNUP_USER_DATA, responseModel);
+		data.put(GenericConstants.AUTH_TOKEN, token);
+		
+		return data;
+	
+	}
+
+	@Override
+	public Map<String, Object> facebookSignup(SocialLoginModel socialLoginModel) {
+		
+		String faceBookUrl = GenericConstants.FACEBOOK + socialLoginModel.getFacebookAcessToken();
+		System.out.println("FaceBook Url --> " + faceBookUrl);
+		
+		Map<String, Object> data = new HashMap<>();
+		
+		try {
+			FacebookSignupModel facebookSignupModel = callFacebookAPI(faceBookUrl);
+			System.out.println("After Call Api faceBook Url --> " + facebookSignupModel);
+			
+			Optional<User> user;
+			if(facebookSignupModel.getEmail() != null && facebookSignupModel.getId() != null) {
+				user = userDao.findByProviderId(GenericConstants.FACEBOOK_AUTH + facebookSignupModel.getId());
+				
+			} else {
+				throw new CustomException(environment.getProperty(ExceptionMessage.ACCESS_TOKEN_NOT_VALID), 
+						HttpStatus.INTERNAL_SERVER_ERROR);
+			}
+			
+			if(!user.isPresent()) {
+				return savefacebookUser(facebookSignupModel, data, socialLoginModel);
+			}
+			
+			String token = jwtTokenUtil.authenticationUser(user.get());
+			
+			UserResponseModel responseModel = CustomDozerHelper.mapEntity(user.get(), UserResponseModel.class);
+			
+			data.put(GenericConstants.SIGNUP_USER_DATA, responseModel);
+			data.put(GenericConstants.AUTH_TOKEN, token);
+			return data;
+			
+		} catch (Exception e) {
+			throw new CustomException(environment.getProperty(ExceptionMessage.INTERNAL_SERVER_ERROR),
+					HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	@Override
+	public Object socialSignUp(SocialLoginModel socialLoginModel) throws GeneralSecurityException, IOException{
+		
+		if (null != socialLoginModel.getFacebookAcessToken()) {
+			return facebookSignup(socialLoginModel);
+		}
+
+		if (null != socialLoginModel.getGoogleToken()) {
+
+			return googleSignUp(socialLoginModel);
+		}	
+		
+		return socialLoginModel;
+	}
+	
+	
 }

@@ -16,6 +16,9 @@ public class SocialLoginModel extends BaseModel{
 	private String googleAuthId;
 	private String googleToken;
 
+	private String faceBookEmail;
+	private boolean isPrivateEmail;
+	private String facebookAcessToken;
 	
 	
 
